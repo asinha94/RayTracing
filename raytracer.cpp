@@ -4,7 +4,7 @@
 #include <cmath>
 #include <utility>
 
-constexpr int   HEIGHT = 600;
+constexpr int   HEIGHT = 720;
 constexpr int   WIDTH  = 720;
 constexpr float ASPECT_RATIO = (float) WIDTH / HEIGHT;
 
@@ -28,11 +28,12 @@ struct Color {
 
 };
 
-const Color ColorRed   {COLOR_MAX, COLOR_MIN, COLOR_MIN};
-const Color ColorGreen {COLOR_MAX, COLOR_MIN, COLOR_MIN};
-const Color ColorBlue  {COLOR_MIN, COLOR_MIN, COLOR_MAX};
-const Color ColorBlack {COLOR_MAX, COLOR_MAX, COLOR_MAX};
-const Color ColorWhite {COLOR_MIN, COLOR_MIN, COLOR_MIN};
+const Color ColorRed    {COLOR_MAX, COLOR_MIN, COLOR_MIN};
+const Color ColorGreen  {COLOR_MIN, COLOR_MAX, COLOR_MIN};
+const Color ColorYellow {COLOR_MAX, COLOR_MAX, COLOR_MIN};
+const Color ColorBlue   {COLOR_MIN, COLOR_MIN, COLOR_MAX};
+const Color ColorBlack  {COLOR_MIN, COLOR_MIN, COLOR_MIN};
+const Color ColorWhite  {COLOR_MAX, COLOR_MAX, COLOR_MAX};
 
 template <typename T>
 class Vec3 {
@@ -155,10 +156,9 @@ public:
     Vec3f dir;
 };
 
-void render(std::string fname, const std::vector<Circle>& objects)
+void render(std::vector<Color>& v, const std::vector<Circle>& objects)
 {
-    std::cout << "Rendering image to " << fname << "\n";
-    std::vector<Color> v(HEIGHT*WIDTH);
+    std::cout << "Tracing rays\n";
 
     for (int y = 0; y < HEIGHT; ++y) {
         for (int x = 0; x < WIDTH; ++x) {
@@ -175,18 +175,21 @@ void render(std::string fname, const std::vector<Circle>& objects)
                 }
             }
 
-            if (obj) v[y*WIDTH + x] = obj->getColor();
+            v[y*WIDTH + x] = obj != nullptr ? obj->getColor() : ColorWhite;
         }
     }
+}
 
+void draw(std::string fname, const std::vector<Color>& colors)
+{
     // Writeout to file
     std::ofstream myfile;
-    myfile.open (fname);
+    myfile.open(fname);
     myfile << "P3\n";
     myfile << WIDTH << " " << HEIGHT << "\n" << (int)COLOR_MAX << "\n";
      for (int i = 0; i < HEIGHT; ++i) {
         for (int j = 0; j < WIDTH; ++j) {
-            Color &c = v[i*WIDTH + j];
+            const Color& c = colors[i*WIDTH + j];
             myfile << c;
         }
         myfile << "\n";
@@ -198,11 +201,16 @@ void render(std::string fname, const std::vector<Circle>& objects)
 int main(int argc, char **argv)
 {
     std::string fname = argc > 1 ? std::string{argv[1]} : "output.ppm";
+    //Circle light{Vec3f{0, 50, 0}, ColorYellow, 10.f};
     std::vector<Circle> c{
-        Circle{Vec3f{0, 0, -10}, ColorRed, 2.f}
+        Circle{Vec3f{0, 0, -10}, ColorRed, 2.f},
+        Circle{Vec3f{-2, 2, -15}, ColorBlue, 5.f},
+        Circle{Vec3f{-23, 2, -20}, ColorGreen, 5.f}
     };
 
-    render(fname, c);
+    std::vector<Color> v(HEIGHT*WIDTH);
+    render(v, c);
+    draw(fname, v);
 
     return 0;
 
