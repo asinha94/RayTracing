@@ -14,6 +14,10 @@ const float FOV_MULTIPLIER = std::tan((FOV * M_PI) / 360.f);
 constexpr uint8_t COLOR_MAX = 255;
 constexpr uint8_t COLOR_MIN = 0;
 
+#ifndef __GNUC__
+    using sqrtf = std::sqrtf;
+#endif
+
 struct Color {
     uint8_t r,g,b;
 
@@ -24,6 +28,14 @@ struct Color {
                << static_cast<int>(c.g) << " "
                << static_cast<int>(c.b) << " ";
         return stream;
+    }
+
+    Color operator*(const float scalar) const {
+        Color c{*this};
+        c.r *= scalar;
+        c.g *= scalar;
+        c.b *= scalar;
+        return c;
     }
 
 };
@@ -91,7 +103,7 @@ public:
 
     void normalize() {
         T sum = x*x + y*y + z*z;
-        T mag = std::sqrt(sum);
+        T mag = sqrtf(sum);
         x /= mag;
         y /= mag;
         z /= mag;
@@ -121,14 +133,12 @@ public:
         if (d2 > radius2) return {false, 0};
 
         // Find distance from closest point to entry point
-        float proj_internal = std::sqrtf(radius2 - d2);
+        float proj_internal = sqrtf(radius2 - d2);
         float d = proj - proj_internal; // p0 - origin
         return {true, d};
     }
 
     Color getColor() const { return color;}
-
-private:
     Vec3f center;
     float radius;
     float radius2;
@@ -151,7 +161,6 @@ public:
     }
 
     Ray(const Vec3f& orig, const Vec3f& dir): orig{orig}, dir{dir} {} 
-//private:
     Vec3f orig;
     Vec3f dir;
 };
@@ -159,7 +168,7 @@ public:
 void render(std::vector<Color>& v, const std::vector<Circle>& objects)
 {
     std::cout << "Tracing rays\n";
-
+    int dpc = 0;
     for (int y = 0; y < HEIGHT; ++y) {
         for (int x = 0; x < WIDTH; ++x) {
             Ray ray{x, y};
@@ -167,6 +176,7 @@ void render(std::vector<Color>& v, const std::vector<Circle>& objects)
             float distance = INFINITY;
             const Circle * obj = nullptr;
 
+            // Check for first object that intersects
             for (const auto& object : objects) {
                 auto result = object.intersect(ray.orig, ray.dir);
                 if (result.first && result.second < distance) {
@@ -175,7 +185,19 @@ void render(std::vector<Color>& v, const std::vector<Circle>& objects)
                 }
             }
 
-            v[y*WIDTH + x] = obj != nullptr ? obj->getColor() : ColorWhite;
+            if (obj) {
+                // Get Normal for dot product
+                Vec3f p0 = ray.dir * distance; // implicit + origin
+                // vector from point to center so normal points in the opposite direction (so we don't have to negate)
+                Vec3f n = obj->center - p0;
+                n.normalize();
+                float dp = n.dot(ray.dir);
+
+                 v[y*WIDTH + x] = obj->getColor();// * std::max(dp, 0.f);
+            } else {
+                 v[y*WIDTH + x] = ColorWhite;
+            }
+        
         }
     }
 }
