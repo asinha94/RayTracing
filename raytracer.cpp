@@ -5,10 +5,10 @@
 #include <utility>
 
 constexpr int   HEIGHT = 720;
-constexpr int   WIDTH  = 720;
+constexpr int   WIDTH  = 1280;
 constexpr float ASPECT_RATIO = (float) WIDTH / HEIGHT;
 
-constexpr float FOV = 90.f;
+constexpr float FOV = 110.f;
 const float FOV_MULTIPLIER = std::tan((FOV * M_PI) / 360.f);
 
 constexpr uint8_t COLOR_MAX = 255;
@@ -101,9 +101,13 @@ public:
         return t;
     }
 
-    void normalize() {
+    T magnitude() const {
         T sum = x*x + y*y + z*z;
-        T mag = sqrtf(sum);
+        return sqrtf(sum);
+    }
+
+    void normalize() {
+        T mag = magnitude();
         x /= mag;
         y /= mag;
         z /= mag;
@@ -138,10 +142,33 @@ public:
         return {true, d};
     }
 
-    Color getColor() const { return color;}
     Vec3f center;
     float radius;
     float radius2;
+    Color color;
+};
+
+class Plane
+{
+public:
+    Plane(): Plane(0, 0, 0) {}
+    Plane (const Vec3f& o, const Vec3f& n, Color c) : origin{o}, normal{n}, color{c} {}
+
+    std::pair<bool, float> intersect(const Vec3f& origin, const Vec3f& ray) const {
+        float denom = ray.dot(normal);
+        if (denom < 1e-6) return {false, 0};
+
+        Vec3f l = this->origin - origin;
+        float t = l.dot(normal) / denom;
+        if (t < 0) return {false, 0};
+
+        Vec3f v = ray * t;
+        return {true, v.magnitude()};
+    }
+
+
+    Vec3f origin;
+    Vec3f normal;
     Color color;
 };
 
@@ -165,10 +192,15 @@ public:
     Vec3f dir;
 };
 
-void render(std::vector<Color>& v, const std::vector<Circle>& objects)
+template <typename T>
+void calculate_color(Color base_color) {
+
+}
+
+void render(std::vector<Color>& v, const std::vector<Circle>& objects, const std::vector<Plane>& walls)
 {
     std::cout << "Tracing rays\n";
-    int dpc = 0;
+
     for (int y = 0; y < HEIGHT; ++y) {
         for (int x = 0; x < WIDTH; ++x) {
             Ray ray{x, y};
@@ -185,18 +217,36 @@ void render(std::vector<Color>& v, const std::vector<Circle>& objects)
                 }
             }
 
-            if (obj) {
-                // Get Normal for dot product
-                Vec3f p0 = ray.dir * distance; // implicit + origin
-                // vector from point to center so normal points in the opposite direction (so we don't have to negate)
-                Vec3f n = obj->center - p0;
-                n.normalize();
-                float dp = n.dot(ray.dir);
+            const Plane * wall_ptr = nullptr; 
 
-                 v[y*WIDTH + x] = obj->getColor();// * std::max(dp, 0.f);
-            } else {
-                 v[y*WIDTH + x] = ColorWhite;
+            for (const auto& wall : walls)
+            {
+                auto result = wall.intersect(ray.orig, ray.dir);
+                if (result.first && result.second < distance) {
+                    wall_ptr = &wall;
+                    distance = result.second;
+                }
             }
+
+            // implicit + origin
+            Vec3f p0 = ray.dir * distance;
+
+            Vec3f n;
+            Color c;
+            if (wall_ptr) {
+                n = wall_ptr->normal;
+                c = wall_ptr->color;
+            } else {
+                // Get Normal for dot product
+                // vector from point to center so normal points in the opposite direction (so we don't have to negate)
+                n = obj->center - p0;
+                n.normalize();
+                c = obj->color;
+            }
+                
+                float dp = n.dot(ray.dir);
+                v[y*WIDTH + x] = c * std::max(dp, 0.f);
+            
         
         }
     }
@@ -224,14 +274,22 @@ int main(int argc, char **argv)
 {
     std::string fname = argc > 1 ? std::string{argv[1]} : "output.ppm";
     //Circle light{Vec3f{0, 50, 0}, ColorYellow, 10.f};
-    std::vector<Circle> c{
-        Circle{Vec3f{0, 0, -10}, ColorRed, 2.f},
-        Circle{Vec3f{-2, 2, -15}, ColorBlue, 5.f},
-        Circle{Vec3f{-23, 2, -20}, ColorGreen, 5.f}
+    std::vector<Circle> spheres{
+        Circle{Vec3f{4, 4, -3}, ColorRed, 2.f},
+        Circle{Vec3f{-8, 2, -6}, ColorBlue, 2.f},
+        Circle{Vec3f{-5, 2, -20}, ColorGreen, 2.f}
+    };
+
+    std::vector<Plane> planes{
+        Plane{Vec3f{-32,   0, -32}, Vec3f{-1,  0, 0}, Color{200, 200, 200} },
+        Plane{Vec3f{ 32,   0, -32}, Vec3f{ 1,  0, 0}, Color{200, 200, 200} },
+        Plane{Vec3f{  0,   0, -32}, Vec3f{ 0,  0,-1}, Color{180, 180, 180} },
+        Plane{Vec3f{  0,  32, -32}, Vec3f{ 0,  1, 0}, Color{196, 196, 196} },
+        Plane{Vec3f{  0, -32, -32}, Vec3f{ 0, -1, 0}, Color{196, 196, 196} },
     };
 
     std::vector<Color> v(HEIGHT*WIDTH);
-    render(v, c);
+    render(v, spheres, planes);
     draw(fname, v);
 
     return 0;
